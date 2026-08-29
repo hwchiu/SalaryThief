@@ -1,5 +1,7 @@
 # Architecture
 
+完整 collector 行為與每個收集面的欄位，見 [`design.md`](design.md)。
+
 ```
                   ┌─────────────────────────────┐
   physical BMCs   │ iDRAC / iLO / XCC / BMC     │
@@ -39,20 +41,9 @@ OpenSearch is the wrong place for cheap 15s gauge scrapes. The collector writes 
 ## Collection model
 
 The collector owns the target list. Prometheus scrapes *the collector*, not each BMC.
-That keeps BMC session pressure under control and matches how most hardware teams
-actually operate: one inventory file, many machines.
-
 Each scrape walks the Redfish service root and follows `@odata.id` links.
-Vendor-specific quirks should be isolated later behind `vendor:` on the target
-instead of hard-coding iDRAC vs iLO URLs.
 
 ## Kind lab
 
-`hack/kind-up.sh` brings up:
-
-- two `dmtf/redfish-mockup-server` pods (public-rackmount1 mock)
-- collector pointed at those Services
-- Prometheus, OpenSearch (security plugin off), Grafana
-
-This is for pipeline verification, not for firmware-accurate vendor behaviour.
-For that, keep a staging iDRAC/iLO in `configs/collector.yaml`.
+`hack/kind-up.sh` brings up two DMTF mock BMCs plus Prometheus, OpenSearch, Grafana.
+This verifies the pipeline, not vendor-accurate firmware behaviour.

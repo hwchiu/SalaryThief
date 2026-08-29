@@ -2,6 +2,8 @@
 
 收集目標不是「多抓幾個 sensor」，而是讓團隊能回答實體機器日常維運問題。
 
+實作細節（路徑、指標、事件、硬碟非效能原則）見 [`design.md`](design.md)。
+
 | 面向 | 問題 | Redfish 來源 | 去哪裡看 |
 |---|---|---|---|
 | 存活 | BMC 通不通、這台開不開機 | ServiceRoot, System.PowerState | Prometheus `bmc_up`, `bmc_system_power_on` |
