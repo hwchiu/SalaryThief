@@ -76,3 +76,16 @@ type InventoryChange struct {
 	NewSerial   string    `json:"new_serial,omitempty"`
 	ObservedAt  time.Time `json:"observed_at"`
 }
+type Event struct {
+	Timestamp   time.Time `json:"@timestamp"`
+	Target      string    `json:"server"`
+	Source      string    `json:"source"`
+	EventID     string    `json:"event_id,omitempty"`
+	Severity    string    `json:"severity"`
+	Category    string    `json:"category"`
+	EventType   string    `json:"event_type"`
+	Component   string    `json:"component"`
+	ComponentID string    `json:"component_id"`
+	Location    string    `json:"location"`
+	Message     string    `json:"message"`
+}
