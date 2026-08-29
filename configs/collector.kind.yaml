@@ -1,0 +1,37 @@
+listen: :9100
+scrape_interval: 15s
+log_level: info
+
+opensearch:
+  enabled: true
+  addresses:
+    - http://opensearch.observability.svc:9200
+  username: ""
+  password: ""
+  insecure_skip_verify: true
+  inventory_index: bmc-inventory
+  events_index: bmc-events
+
+targets:
+  - name: mock-rackmount-01
+    endpoint: http://redfish-mock-01.salarythief.svc:8000
+    username: root
+    password: "123"
+    insecure_skip_verify: true
+    vendor: dmtf
+    timeout: 10s
+    labels:
+      rack: kind
+      role: mock
+      site: local
+  - name: mock-rackmount-02
+    endpoint: http://redfish-mock-02.salarythief.svc:8000
+    username: root
+    password: "123"
+    insecure_skip_verify: true
+    vendor: dmtf
+    timeout: 10s
+    labels:
+      rack: kind
+      role: mock
+      site: local
