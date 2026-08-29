@@ -46,3 +46,33 @@ type Snapshot struct {
 	Duration    time.Duration
 	Resources   map[string]ResourceStatus
 }
+
+// Inventory keeps physical location separate from mutable hardware identity.
+type InventoryComponent struct {
+	Type          string      `json:"type"`
+	ComponentID   string      `json:"component_id"`
+	Location      string      `json:"location"`
+	Manufacturer  string      `json:"manufacturer,omitempty"`
+	Model         string      `json:"model,omitempty"`
+	Serial        string      `json:"serial,omitempty"`
+	PartNumber    string      `json:"part_number,omitempty"`
+	Firmware      string      `json:"firmware,omitempty"`
+	CapacityBytes *uint64     `json:"capacity_bytes,omitempty"`
+	Health        HealthState `json:"health"`
+}
+type InventorySnapshot struct {
+	Target     string               `json:"server"`
+	Scope      string               `json:"observability_scope"`
+	ObservedAt time.Time            `json:"observed_at"`
+	Components []InventoryComponent `json:"components"`
+}
+type InventoryChange struct {
+	Target      string    `json:"server"`
+	Type        string    `json:"component"`
+	ComponentID string    `json:"component_id"`
+	Location    string    `json:"location"`
+	Change      string    `json:"change"`
+	OldSerial   string    `json:"old_serial,omitempty"`
+	NewSerial   string    `json:"new_serial,omitempty"`
+	ObservedAt  time.Time `json:"observed_at"`
+}

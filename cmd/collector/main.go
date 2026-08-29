@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/hwchiu/SalaryThief/internal/collect"
 	"github.com/hwchiu/SalaryThief/internal/config"
+	"github.com/hwchiu/SalaryThief/internal/inventory"
 	"github.com/hwchiu/SalaryThief/internal/metrics"
 	"github.com/hwchiu/SalaryThief/internal/model"
 	"github.com/hwchiu/SalaryThief/internal/opensearch"
@@ -36,6 +38,7 @@ func main() {
 	var osClient *opensearch.Client
 	if cfg.OpenSearch.Enabled {
 		osClient = opensearch.New(cfg.OpenSearch)
+		osClient.SetObserver(reg.ObservePersistence)
 		log.Info("opensearch enabled", "addresses", cfg.OpenSearch.Addresses)
 	}
 
@@ -63,7 +66,23 @@ func main() {
 		}
 	}()
 
+	var targetGates sync.Map
+	acquire := func(ctx context.Context, name string) bool {
+		value, _ := targetGates.LoadOrStore(name, make(chan struct{}, 1))
+		gate := value.(chan struct{})
+		select {
+		case gate <- struct{}{}:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+	release := func(name string) { value, _ := targetGates.Load(name); <-value.(chan struct{}) }
 	scheduler := collect.NewScheduler(cfg.Targets, cfg.Workers.Telemetry, cfg.Scheduler.TelemetryInterval, cfg.Retry.InitialBackoff, cfg.Retry.MaxBackoff, func(runCtx context.Context, target config.Target) model.Snapshot {
+		if !acquire(runCtx, target.Name) {
+			return model.Snapshot{Target: target.Name}
+		}
+		defer release(target.Name)
 		return collect.Scrape(runCtx, target, log)
 	})
 	var active atomic.Int64
@@ -78,6 +97,26 @@ func main() {
 		}
 		if osClient != nil {
 			_ = osClient.Publish(context.Background(), snap)
+		}
+	})
+	// Inventory has its own cadence and worker pool; it never runs on telemetry or scrape paths.
+	var inventoryResults sync.Map
+	inventoryScheduler := collect.NewScheduler(cfg.Targets, cfg.Workers.Inventory, cfg.Scheduler.InventoryInterval, cfg.Retry.InitialBackoff, cfg.Retry.MaxBackoff, func(runCtx context.Context, target config.Target) model.Snapshot {
+		if !acquire(runCtx, target.Name) {
+			return model.Snapshot{Target: target.Name}
+		}
+		defer release(target.Name)
+		inv, err := inventory.Collect(runCtx, target)
+		if err == nil {
+			inventoryResults.Store(target.Name, inv)
+		}
+		return model.Snapshot{Target: target.Name, Up: err == nil}
+	})
+	go inventoryScheduler.Run(ctx, func(s model.Snapshot) {
+		if s.Up && osClient != nil {
+			if value, ok := inventoryResults.LoadAndDelete(s.Target); ok {
+				_ = osClient.PublishInventory(context.Background(), value.(model.InventorySnapshot))
+			}
 		}
 	})
 	<-ctx.Done()

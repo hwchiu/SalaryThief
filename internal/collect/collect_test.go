@@ -51,7 +51,7 @@ func TestSchedulerBoundsConcurrency(t *testing.T) {
 	}
 	var active, max atomic.Int32
 	done := make(chan struct{}, 8)
-	run := func(context.Context, config.Target) model.Snapshot {
+	run := func(_ context.Context, target config.Target) model.Snapshot {
 		n := active.Add(1)
 		for {
 			m := max.Load()
@@ -61,7 +61,7 @@ func TestSchedulerBoundsConcurrency(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 		active.Add(-1)
-		return model.Snapshot{Up: true}
+		return model.Snapshot{Target: target.Name, Up: true}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -76,5 +76,35 @@ func TestSchedulerBoundsConcurrency(t *testing.T) {
 	}
 	if got := max.Load(); got > 2 {
 		t.Fatalf("max active=%d", got)
+	}
+}
+
+func TestSchedulerNeverCollectsTargetConcurrently(t *testing.T) {
+	var active, max atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{}, 2)
+	run := func(_ context.Context, target config.Target) model.Snapshot {
+		n := active.Add(1)
+		for {
+			m := max.Load()
+			if n <= m || max.CompareAndSwap(m, n) {
+				break
+			}
+		}
+		time.Sleep(40 * time.Millisecond)
+		active.Add(-1)
+		return model.Snapshot{Target: target.Name, Up: true}
+	}
+	s := NewScheduler([]config.Target{{Name: "one"}}, 2, 5*time.Millisecond, time.Second, time.Second, run)
+	go s.Run(ctx, func(model.Snapshot) { done <- struct{}{} })
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("no collection")
+	}
+	time.Sleep(60 * time.Millisecond)
+	if got := max.Load(); got != 1 {
+		t.Fatalf("max in-flight for one target = %d, want 1", got)
 	}
 }

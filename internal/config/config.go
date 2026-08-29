@@ -18,9 +18,11 @@ type Config struct {
 }
 type SchedulerConfig struct {
 	TelemetryInterval time.Duration `yaml:"telemetry_interval"`
+	InventoryInterval time.Duration `yaml:"inventory_interval"`
 }
 type WorkersConfig struct {
 	Telemetry int `yaml:"telemetry"`
+	Inventory int `yaml:"inventory"`
 }
 type RetryConfig struct {
 	InitialBackoff time.Duration `yaml:"initial_backoff"`
@@ -76,6 +78,12 @@ func Load(path string) (*Config, error) {
 	}
 	if c.Workers.Telemetry <= 0 {
 		c.Workers.Telemetry = 4
+	}
+	if c.Workers.Inventory <= 0 {
+		c.Workers.Inventory = 1
+	}
+	if c.Scheduler.InventoryInterval <= 0 {
+		c.Scheduler.InventoryInterval = 6 * time.Hour
 	}
 	if c.Retry.InitialBackoff <= 0 {
 		c.Retry.InitialBackoff = 2 * time.Second

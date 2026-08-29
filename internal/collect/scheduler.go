@@ -67,15 +67,20 @@ func (s *Scheduler) Run(ctx context.Context, result func(model.Snapshot)) {
 	}
 	next := map[string]time.Time{}
 	failures := map[string]int{}
+	inFlight := map[string]bool{}
 	tick := time.NewTicker(minDuration(s.interval/4, time.Second))
 	defer tick.Stop()
 	dispatch := func(now time.Time) {
 		for _, t := range s.targets {
+			if inFlight[t.Name] {
+				continue
+			}
 			if due := next[t.Name]; !due.IsZero() && now.Before(due) {
 				continue
 			}
 			select {
 			case jobs <- t:
+				inFlight[t.Name] = true
 				next[t.Name] = now.Add(s.interval)
 				if s.onQueueDepth != nil {
 					s.onQueueDepth(len(jobs))
@@ -94,6 +99,7 @@ func (s *Scheduler) Run(ctx context.Context, result func(model.Snapshot)) {
 		case now := <-tick.C:
 			dispatch(now)
 		case snap := <-outcomes:
+			inFlight[snap.Target] = false
 			result(snap)
 			if snap.Up {
 				failures[snap.Target] = 0

@@ -11,13 +11,16 @@ import (
 
 type targetState struct{ snapshot model.Snapshot }
 type Registry struct {
-	mu            sync.RWMutex
-	targets       map[string]targetState
-	collector     *stateCollector
-	errors        *prometheus.CounterVec
-	targetCount   atomic.Int64
-	workersActive atomic.Int64
-	queueDepth    atomic.Int64
+	mu                 sync.RWMutex
+	targets            map[string]targetState
+	collector          *stateCollector
+	errors             *prometheus.CounterVec
+	persistenceErrors  *prometheus.CounterVec
+	persistenceDropped prometheus.Counter
+	targetCount        atomic.Int64
+	workersActive      atomic.Int64
+	queueDepth         atomic.Int64
+	persistenceDepth   atomic.Int64
 }
 
 func (r *Registry) SetTargetCount(n int)   { r.targetCount.Store(int64(n)) }
@@ -29,8 +32,21 @@ func NewWithRegisterer(registerer prometheus.Registerer) *Registry {
 	r := &Registry{targets: map[string]targetState{}}
 	r.collector = &stateCollector{r: r}
 	r.errors = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "redfish_collection_errors_total", Help: "Redfish collection failures by bounded reason."}, []string{"server", "reason"})
-	registerer.MustRegister(r.collector, r.errors)
+	r.persistenceErrors = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "redfish_collector_persistence_errors_total", Help: "Asynchronous persistence failures."}, []string{"sink", "reason"})
+	r.persistenceDropped = prometheus.NewCounter(prometheus.CounterOpts{Name: "redfish_collector_persistence_dropped_total", Help: "Publications dropped because the bounded queue was full."})
+	registerer.MustRegister(r.collector, r.errors, r.persistenceErrors, r.persistenceDropped)
 	return r
+}
+func (r *Registry) ObservePersistence(depth int, event string) {
+	if depth >= 0 {
+		r.persistenceDepth.Store(int64(depth))
+	}
+	switch event {
+	case "dropped":
+		r.persistenceDropped.Inc()
+	case "request", "publish":
+		r.persistenceErrors.WithLabelValues("opensearch", event).Inc()
+	}
 }
 func (r *Registry) Observe(s model.Snapshot) {
 	r.mu.Lock()
@@ -112,6 +128,7 @@ func (c *stateCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(targetsDesc, prometheus.GaugeValue, float64(c.r.targetCount.Load()))
 	ch <- prometheus.MustNewConstMetric(workersDesc, prometheus.GaugeValue, float64(c.r.workersActive.Load()), "telemetry")
 	ch <- prometheus.MustNewConstMetric(queueDesc, prometheus.GaugeValue, float64(c.r.queueDepth.Load()), "telemetry")
+	ch <- prometheus.MustNewConstMetric(queueDesc, prometheus.GaugeValue, float64(c.r.persistenceDepth.Load()), "persistence")
 	for _, state := range c.r.targets {
 		s := state.snapshot
 		labels := []string{s.Target, s.Scope}
