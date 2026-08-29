@@ -11,7 +11,7 @@ Validation Go: golang:1.22-bookworm Docker image
 Docker/runtime: Docker Desktop 4.22.0, Engine 24.0.5 linux/arm64
 Kind: v0.33.0
 kubectl: v1.27.2 client
-Git commit: f3b5d63
+Git commit: bdeb79f0fcde477a56f5e59dad940b66d041d097
 Branch: codex/v2-phase1
 ```
 
@@ -46,6 +46,7 @@ Branch: codex/v2-phase1
 - Initial scheduler only dispatched the first queue-capacity batch. Added dispatch-on-completion; the bounded-concurrency test now covers the regression.
 - A Kind Service selector removal left a stale EndpointSlice. The integration harness removes both Endpoints and EndpointSlices before asserting the deterministic unreachable fault.
 - Final review found stale cached `OK` resource state could survive a total connectivity failure. Cache now retains freshness but exports every affected resource as UNKNOWN; unit and scaled-mock runtime checks passed.
+- Phase 1 merge review: added per-target scheduler in-flight exclusion (unit-tested at max one concurrent call), bounded OpenSearch HTTP client timeout/queue/drop/error instrumentation, and completed Grafana Dashboard 01 provisioning.
 
 ## Remaining limitations
 
