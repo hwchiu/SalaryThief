@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: bmc-healthy-01, namespace: salarythief}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: bmc-healthy-01}}
+  template:
+    metadata: {labels: {app: bmc-healthy-01}}
+    spec:
+      containers: [{name: mock, image: salarythief-redfish-mock:dev, imagePullPolicy: Never, env: [{name: MODE, value: healthy}], ports: [{containerPort: 8000}]}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: bmc-healthy-01, namespace: salarythief}
+spec: {selector: {app: bmc-healthy-01}, ports: [{port: 8000, targetPort: 8000}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: bmc-slow-01, namespace: salarythief}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: bmc-slow-01}}
+  template:
+    metadata: {labels: {app: bmc-slow-01}}
+    spec:
+      containers: [{name: mock, image: salarythief-redfish-mock:dev, imagePullPolicy: Never, env: [{name: MODE, value: slow}], ports: [{containerPort: 8000}]}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: bmc-slow-01, namespace: salarythief}
+spec: {selector: {app: bmc-slow-01}, ports: [{port: 8000, targetPort: 8000}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: bmc-partial-01, namespace: salarythief}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: bmc-partial-01}}
+  template:
+    metadata: {labels: {app: bmc-partial-01}}
+    spec:
+      containers: [{name: mock, image: salarythief-redfish-mock:dev, imagePullPolicy: Never, env: [{name: MODE, value: partial}], ports: [{containerPort: 8000}]}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: bmc-partial-01, namespace: salarythief}
+spec: {selector: {app: bmc-partial-01}, ports: [{port: 8000, targetPort: 8000}]}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: bmc-unreachable-01, namespace: salarythief}
+spec: {ports: [{port: 8000, targetPort: 8000}]}

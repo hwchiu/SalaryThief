@@ -1,7 +1,7 @@
 IMAGE ?= salarythief-collector:dev
 GO     ?= go
 
-.PHONY: build test tidy run kind-up kind-down image
+.PHONY: build test tidy run kind-up kind-down image integration-test test-race
 
 tidy:
 	$(GO) mod tidy
@@ -11,6 +11,9 @@ build:
 
 test:
 	$(GO) test ./...
+
+test-race:
+	$(GO) test -race ./...
 
 run: build
 	./bin/collector -config configs/collector.yaml
@@ -23,3 +26,6 @@ kind-up:
 
 kind-down:
 	bash hack/kind-down.sh
+
+integration-test:
+	bash hack/integration-test.sh

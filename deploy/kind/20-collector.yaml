@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: salarythief-config, namespace: salarythief}
+data:
+  collector.yaml: |
+    listen: :9100
+    scheduler: {telemetry_interval: 3s}
+    workers: {telemetry: 2}
+    retry: {initial_backoff: 2s, max_backoff: 8s}
+    opensearch: {enabled: true, addresses: [http://opensearch.observability.svc:9200], inventory_index: bmc-inventory}
+    targets:
+    - {name: bmc-healthy-01, endpoint: http://bmc-healthy-01.salarythief.svc:8000, timeout: 1s, labels: {observability_scope: local}, collect: {thermal: true, power: true, storage: true}}
+    - {name: bmc-unreachable-01, endpoint: http://bmc-unreachable-01.salarythief.svc:8000, timeout: 1s, labels: {observability_scope: local}, collect: {thermal: true, storage: true}}
+    - {name: bmc-slow-01, endpoint: http://bmc-slow-01.salarythief.svc:8000, timeout: 1s, labels: {observability_scope: local}, collect: {thermal: true, storage: true}}
+    - {name: bmc-partial-01, endpoint: http://bmc-partial-01.salarythief.svc:8000, timeout: 1s, labels: {observability_scope: local}, collect: {thermal: true, storage: true}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: salarythief-collector, namespace: salarythief}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: salarythief-collector}}
+  template:
+    metadata: {labels: {app: salarythief-collector}}
+    spec:
+      containers:
+      - name: collector
+        image: salarythief-collector:dev
+        imagePullPolicy: Never
+        args: ["-config", "/etc/salarythief/collector.yaml"]
+        ports: [{containerPort: 9100}]
+        readinessProbe: {httpGet: {path: /healthz, port: 9100}, initialDelaySeconds: 2}
+        volumeMounts: [{name: config, mountPath: /etc/salarythief, readOnly: true}]
+      volumes: [{name: config, configMap: {name: salarythief-config}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: salarythief-collector, namespace: salarythief}
+spec: {selector: {app: salarythief-collector}, ports: [{port: 9100, targetPort: 9100}]}

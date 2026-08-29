@@ -1,0 +1,1 @@
+{"title":"Physical Server Overview","uid":"salarythief-overview","schemaVersion":39,"version":1,"panels":[{"type":"stat","title":"BMC Offline","targets":[{"expr":"sum(redfish_up == 0)"}]},{"type":"table","title":"Server connectivity","targets":[{"expr":"redfish_up"}]},{"type":"table","title":"Resource health","targets":[{"expr":"redfish_resource_health"}]}]}

@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/hwchiu/SalaryThief/internal/collect"
 	"github.com/hwchiu/SalaryThief/internal/config"
 	"github.com/hwchiu/SalaryThief/internal/metrics"
+	"github.com/hwchiu/SalaryThief/internal/model"
 	"github.com/hwchiu/SalaryThief/internal/opensearch"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -31,6 +32,7 @@ func main() {
 	}
 
 	reg := metrics.New()
+	reg.SetTargetCount(len(cfg.Targets))
 	var osClient *opensearch.Client
 	if cfg.OpenSearch.Enabled {
 		osClient = opensearch.New(cfg.OpenSearch)
@@ -61,45 +63,25 @@ func main() {
 		}
 	}()
 
-	runOnce(ctx, cfg, reg, osClient, log)
-	ticker := time.NewTicker(cfg.ScrapeInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			_ = srv.Shutdown(shutdown)
-			return
-		case <-ticker.C:
-			runOnce(ctx, cfg, reg, osClient, log)
+	scheduler := collect.NewScheduler(cfg.Targets, cfg.Workers.Telemetry, cfg.Scheduler.TelemetryInterval, cfg.Retry.InitialBackoff, cfg.Retry.MaxBackoff, func(runCtx context.Context, target config.Target) model.Snapshot {
+		return collect.Scrape(runCtx, target, log)
+	})
+	var active atomic.Int64
+	scheduler.SetActivityObserver(func(delta int) { reg.SetWorkersActive(int(active.Add(int64(delta)))) })
+	scheduler.SetQueueDepthObserver(reg.SetQueueDepth)
+	go scheduler.Run(ctx, func(snap model.Snapshot) {
+		reg.Observe(snap)
+		if snap.Up {
+			log.Info("scraped", "target", snap.Target, "duration", snap.Duration.String())
+		} else {
+			log.Warn("scrape failed", "target", snap.Target, "reason", snap.ErrorClass)
 		}
-	}
-}
-
-func runOnce(ctx context.Context, cfg *config.Config, reg *metrics.Registry, osClient *opensearch.Client, log *slog.Logger) {
-	var wg sync.WaitGroup
-	for _, t := range cfg.Targets {
-		t := t
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			sctx, cancel := context.WithTimeout(ctx, t.Timeout+2*time.Second)
-			defer cancel()
-			snap := collect.Scrape(sctx, t, log)
-			reg.Observe(snap)
-			if snap.Up {
-				log.Info("scraped", "target", t.Name, "duration", snap.Duration.String(), "systems", len(snap.Systems), "chassis", len(snap.Chassis))
-			} else {
-				log.Warn("scrape failed", "target", t.Name, "err", snap.Error)
-			}
-			if osClient != nil {
-				if err := osClient.Publish(sctx, snap); err != nil {
-					log.Warn("opensearch publish failed", "target", t.Name, "err", err)
-				}
-			}
-		}()
-	}
-	wg.Wait()
+		if osClient != nil {
+			_ = osClient.Publish(context.Background(), snap)
+		}
+	})
+	<-ctx.Done()
+	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutdown)
 }
