@@ -1,0 +1,7 @@
+bin/
+dist/
+*.exe
+.DS_Store
+vendor/
+.env
+configs/collector.local.yaml
